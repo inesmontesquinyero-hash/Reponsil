@@ -1,0 +1,3 @@
+Añade: - index.html, styles.css, script.js (reloj mundial) - README.md (documentación) - run_checks.sh (script para comprobaciones locales y logs) - .github/workflows/ci.yml (workflow CI: npm ci, npm audit, npm test, npm build)
+
+Notas: El workflow de CI usa Node 18 en runner (actions/setup-node@v4 with node-version: 18). Los artefactos de auditoría y paquetes desactualizados se suben como archivos (npm_audit.json, npm_outdated.json). Ejecuta run_checks.sh localmente para generar logs antes de abrir el PR si quieres verificar todo localmente.
