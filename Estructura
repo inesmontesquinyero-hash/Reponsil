@@ -1,0 +1,14 @@
+world-clock-app/
+├─ src/
+│  ├─ index.html
+│  ├─ style.css
+│  └─ app.js
+│
+├─ .github/
+│   └─ workflows/
+│       └─ ci.yml
+│
+├─ .gitignore
+├─ LICENSE
+├─ README.md
+└─ package.json
