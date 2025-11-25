@@ -1,0 +1,17 @@
+{
+  "name": "reponsil-world-clock",
+  "version": "1.0.0",
+  "description": "Reloj mundial - demo",
+  "private": true,
+  "scripts": {
+    "start": "serve . -s -l 5000",
+    "check:html": "npx html-validate \"index.html\"",
+    "check:css": "npx stylelint \"**/*.css\" --allow-empty-input",
+    "ci": "npm run check:html && npm run check:css"
+  },
+  "devDependencies": {
+    "html-validate": "^8.0.0",
+    "stylelint": "^15.0.0",
+    "serve": "^14.0.1"
+  }
+}
