@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <title>Reloj Mundial</title>
+
+  <!-- Hoja de estilos -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <main class="contenedor">
+    <header>
+      <h1>Reloj mundial</h1>
+      <p class="lead">Añade zonas horarias y visualiza la hora local en cada una.</p>
+    </header>
+
+    <section class="controles" aria-label="Controles principales">
+      <label for="tz-input">Añadir zona horaria:</label>
+      <input id="tz-input" list="tz-list" placeholder="Ej: Europe/Madrid" />
+      <datalist id="tz-list"></datalist>
+
+      <button id="add-btn" class="control-btn">Añadir</button>
+
+      <div class="opciones" aria-hidden="false">
+        <label class="option-label">
+          <input type="checkbox" id="show-date" checked>
+          Mostrar fecha
+        </label>
+
+        <label class="option-label">
+          <input type="checkbox" id="hour12">
+          Formato 12 horas
+        </label>
+
+        <button id="reset-defaults" class="control-btn">Restablecer por defecto</button>
+      </div>
+    </section>
+
+    <section id="clocks" class="clock-grid" aria-live="polite" aria-label="Relojes por zona"></section>
+
+    <footer>
+      <p>Hecho con <code>Intl.DateTimeFormat</code> • Las zonas seleccionadas se guardan localmente</p>
+    </footer>
+  </main>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
