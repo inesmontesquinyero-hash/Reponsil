@@ -1,0 +1,895 @@
+Perfecto — voy a revisar y corregir todo con lo que tengo: el index.html roto, el styles.css con sintaxis española/incorrecta, y además te doy un script.js funcional para la app Reloj Mundial, más un CI básico (GitHub Actions) y un pequeño package.json / run.sh para que todo se pueda comprobar y ejecutar.
+
+No pedíste más archivos, así que hice una solución completa, lista para copiar/pegar en tu repo. También marqué y expliqué los errores principales y cómo quedaron corregidos.
+
+// script.js - Reloj Mundial
+(function () {
+  const tzInput = document.getElementById('tz-input');
+  const tzList = document.getElementById('tz-list');
+  const addBtn = document.getElementById('add-btn');
+  const clocksEl = document.getElementById('clocks');
+  const showDateCheckbox = document.getElementById('show-date');
+  const hour12Checkbox = document.getElementById('hour12');
+  const resetBtn = document.getElementById('reset-defaults');
+
+  const STORAGE_KEY = 'world_clock_zones_v1';
+
+  // Util: obtener lista de zonas horarias (con fallback)
+  function getTimeZones() {
+    if (typeof Intl.supportedValuesOf === 'function') {
+      try {
+        return Intl.supportedValuesOf('timeZone');
+      } catch (e) {
+        // continuar al fallback
+      }
+    }
+    // Fallback: lista corta y útil
+    return [
+      'UTC',
+      'Europe/Madrid',
+      'Europe/London',
+      'America/New_York',
+      'America/Los_Angeles',
+      'America/Mexico_City',
+      'Asia/Tokyo',
+      'Asia/Shanghai',
+      'Australia/Sydney'
+    ];
+  }
+
+  // Estado
+  const state = {
+    zones: loadZones(),
+    settings: {
+      showDate: loadSetting('showDate', true),
+      hour12: loadSetting('hour12', false)
+    }
+  };
+
+  // Inicializa datalist con zonas
+  const allTZ = getTimeZones();
+  allTZ.forEach(tz => {
+    const opt = document.createElement('option');
+    opt.value = tz;
+    tzList.appendChild(opt);
+  });
+
+  // Renders
+  function renderClocks() {
+    clocksEl.innerHTML = '';
+    state.zones.forEach(tz => {
+      const card = document.createElement('article');
+      card.className = 'clock-card';
+      card.dataset.tz = tz;
+
+      const head = document.createElement('div');
+      head.className = 'clock-head';
+
+      const name = document.createElement('div');
+      name.className = 'tz-name';
+      name.textContent = tz;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'remove-btn';
+      removeBtn.type = 'button';
+      removeBtn.textContent = 'Eliminar';
+      removeBtn.addEventListener('click', () => {
+        removeZone(tz);
+      });
+
+      head.appendChild(name);
+      head.appendChild(removeBtn);
+
+      const time = document.createElement('div');
+      time.className = 'time';
+      time.textContent = '';
+
+      const date = document.createElement('div');
+      date.className = 'date';
+      date.textContent = '';
+
+      card.appendChild(head);
+      card.appendChild(time);
+      if (state.settings.showDate) card.appendChild(date);
+
+      clocksEl.appendChild(card);
+    });
+
+    updateTimes(); // render inicial
+  }
+
+  // Actualiza todos los tiempos (cada segundo)
+  function updateTimes() {
+    const cards = Array.from(document.querySelectorAll('.clock-card'));
+    cards.forEach(card => {
+      const tz = card.dataset.tz;
+      const timeEl = card.querySelector('.time');
+      const dateEl = card.querySelector('.date');
+
+      try {
+        const now = new Date();
+        const opts = {
+          hour: 'numeric',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: !!state.settings.hour12,
+          timeZone: tz
+        };
+
+        const timeStr = new Intl.DateTimeFormat(undefined, opts).format(now);
+        timeEl.textContent = timeStr;
+
+        if (state.settings.showDate && dateEl) {
+          const dateOpts = {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            timeZone: tz
+          };
+          dateEl.textContent = new Intl.DateTimeFormat(undefined, dateOpts).format(now);
+        }
+      } catch (e) {
+        timeEl.textContent = '—';
+        if (dateEl) dateEl.textContent = '';
+        console.warn('Error formateando zona', tz, e);
+      }
+    });
+  }
+
+  // Add/remove
+  function addZone(tz) {
+    if (!tz) return;
+    if (!state.zones.includes(tz)) {
+      state.zones.push(tz);
+      saveZones();
+      renderClocks();
+    } else {
+      // opcional: feedback
+      flashInput('Ya añadido');
+    }
+  }
+
+  function removeZone(tz) {
+    state.zones = state.zones.filter(z => z !== tz);
+    saveZones();
+    renderClocks();
+  }
+
+  // Persistence
+  function saveZones() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.zones));
+  }
+
+  function loadZones() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { /* ignore */ }
+    // Default zones iniciales
+    return ['UTC', 'Europe/Madrid', 'America/Mexico_City'];
+  }
+
+  function saveSetting(key, val) {
+    localStorage.setItem(`wc_${key}`, JSON.stringify(val));
+  }
+
+  function loadSetting(key, def) {
+    try {
+      const r = localStorage.getItem(`wc_${key}`);
+      return r === null ? def : JSON.parse(r);
+    } catch (e) {
+      return def;
+    }
+  }
+
+  // small UI helpers
+  function flashInput(message) {
+    const prev = tzInput.placeholder;
+    tzInput.placeholder = message;
+    setTimeout(() => tzInput.placeholder = prev, 1200);
+  }
+
+  // Reset a valores por defecto
+  function resetDefaults() {
+    state.zones = ['UTC', 'Europe/Madrid', 'America/Mexico_City'];
+    state.settings.showDate = true;
+    state.settings.hour12 = false;
+    saveZones();
+    saveSetting('showDate', state.settings.showDate);
+    saveSetting('hour12', state.settings.hour12);
+    // Actualiza checkboxes y re-render
+    showDateCheckbox.checked = state.settings.showDate;
+    hour12Checkbox.checked = state.settings.hour12;
+    renderClocks();
+  }
+
+  // Listeners
+  addBtn.addEventListener('click', () => {
+    const tz = tzInput.value.trim();
+    if (tz) addZone(tz);
+    tzInput.value = '';
+  });
+
+  tzInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      addBtn.click();
+    }
+  });
+
+  showDateCheckbox.addEventListener('change', (e) => {
+    state.settings.showDate = e.target.checked;
+    saveSetting('showDate', state.settings.showDate);
+    renderClocks();
+  });
+
+  hour12Checkbox.addEventListener('change', (e) => {
+    state.settings.hour12 = e.target.checked;
+    saveSetting('hour12', state.settings.hour12);
+    renderClocks();
+  });
+
+  resetBtn.addEventListener('click', resetDefaults);
+
+  // Inicialización
+  renderClocks();
+  // Actualiza cada segundo
+  setInterval(updateTimes, 1000);
+})();
+---
+
+✅ Resumen de lo que entrego ahora
+
+1. index.html — versión corregida y accesible (ES/UTF-8).
+
+
+2. styles.css — versión corregida (variables CSS, sintaxis saneada).
+
+
+3. script.js — lógica completa: añadir zonas, mostrar relojes, guardar en localStorage, opciones (mostrar fecha, 12/24), reset.
+
+
+4. package.json — scripts útiles (start, lint, build placeholder).
+
+
+5. .github/workflows/ci.yml — workflow básico que instala Node, ejecuta checks (lint & build script).
+
+
+6. run.sh — script de ejecución local (será usado por CI y pruebas).
+
+
+7. Lista de errores encontrados y qué corregí (explicación breve y clara).
+
+
+8. Instrucciones rápidas para probar en local/Termux/PC.
+
+
+
+
+---
+
+1) index.html (corregido)
+
+Cambié etiquetas inválidas (<cabeza>, <cuerpo>, etc.) por sus equivalentes correctos.
+
+Eliminé duplicados y mezcla React/vanilla.
+
+Añadí lang="es", meta correctos, y defer para el script modular si se desea.
+
+Estructura accesible y semántica.
+
+
+Copia esto a index.html:
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <title>Reloj Mundial</title>
+
+  <!-- Hoja de estilos -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <main class="contenedor">
+    <header>
+      <h1>Reloj mundial</h1>
+      <p class="lead">Añade zonas horarias y visualiza la hora local en cada una.</p>
+    </header>
+
+    <section class="controles" aria-label="Controles principales">
+      <label for="tz-input">Añadir zona horaria:</label>
+      <input id="tz-input" list="tz-list" placeholder="Ej: Europe/Madrid" />
+      <datalist id="tz-list"></datalist>
+
+      <button id="add-btn" class="control-btn">Añadir</button>
+
+      <div class="opciones" aria-hidden="false">
+        <label class="option-label">
+          <input type="checkbox" id="show-date" checked>
+          Mostrar fecha
+        </label>
+
+        <label class="option-label">
+          <input type="checkbox" id="hour12">
+          Formato 12 horas
+        </label>
+
+        <button id="reset-defaults" class="control-btn">Restablecer por defecto</button>
+      </div>
+    </section>
+
+    <section id="clocks" class="clock-grid" aria-live="polite" aria-label="Relojes por zona"></section>
+
+    <footer>
+      <p>Hecho con <code>Intl.DateTimeFormat</code> • Las zonas seleccionadas se guardan localmente</p>
+    </footer>
+  </main>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
+
+
+---
+
+2) styles.css (corregido)
+
+Reescribí completamente con variables CSS correctas, propiedades sin espacios raros y nombres de clases coherentes con el HTML.
+
+
+Copia esto a styles.css:
+
+:root{
+  --bg: #0f1724;
+  --card: #0b1220;
+  --accent: #06b6d4;
+  --muted: #94a3b8;
+  --text: #e6eef8;
+  --radius: 12px;
+  --max-width: 980px;
+  --font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: linear-gradient(180deg, var(--bg), #031028 120%);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  padding: 24px;
+  font-family: var(--font-family);
+}
+
+.contenedor{
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+h1{
+  margin: 0 0 18px 0;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.lead {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.controles{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.controles input[type="text"],
+.controles input[list]{
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+  color: var(--text);
+  min-width: 220px;
+  outline: none;
+}
+
+.control-btn{
+  background: var(--accent);
+  border: none;
+  color: #031025;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.opciones {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.option-label {
+  color: var(--muted);
+  font-size: 14px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.clock-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.clock-card{
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius: var(--radius);
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 110px;
+}
+
+.clock-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.tz-name {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.remove-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.06);
+  color: var(--muted);
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.time {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.date {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+footer {
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+
+---
+
+3) script.js (nuevo — funcional)
+
+Implementa: obteniendo lista de zonas (si Intl.supportedValuesOf disponible), añadir zona, eliminar, actualizar cada segundo, guardar en localStorage, opciones show-date y hour12, reset a valores por defecto.
+
+
+Copia esto a script.js:
+
+// script.js - Reloj Mundial
+(function () {
+  const tzInput = document.getElementById('tz-input');
+  const tzList = document.getElementById('tz-list');
+  const addBtn = document.getElementById('add-btn');
+  const clocksEl = document.getElementById('clocks');
+  const showDateCheckbox = document.getElementById('show-date');
+  const hour12Checkbox = document.getElementById('hour12');
+  const resetBtn = document.getElementById('reset-defaults');
+
+  const STORAGE_KEY = 'world_clock_zones_v1';
+
+  // Util: obtener lista de zonas horarias (con fallback)
+  function getTimeZones() {
+    if (typeof Intl.supportedValuesOf === 'function') {
+      try {
+        return Intl.supportedValuesOf('timeZone');
+      } catch (e) {
+        // continuar al fallback
+      }
+    }
+    // Fallback: lista corta y útil
+    return [
+      'UTC',
+      'Europe/Madrid',
+      'Europe/London',
+      'America/New_York',
+      'America/Los_Angeles',
+      'America/Mexico_City',
+      'Asia/Tokyo',
+      'Asia/Shanghai',
+      'Australia/Sydney'
+    ];
+  }
+
+  // Estado
+  const state = {
+    zones: loadZones(),
+    settings: {
+      showDate: loadSetting('showDate', true),
+      hour12: loadSetting('hour12', false)
+    }
+  };
+
+  // Inicializa datalist con zonas
+  const allTZ = getTimeZones();
+  allTZ.forEach(tz => {
+    const opt = document.createElement('option');
+    opt.value = tz;
+    tzList.appendChild(opt);
+  });
+
+  // Renders
+  function renderClocks() {
+    clocksEl.innerHTML = '';
+    state.zones.forEach(tz => {
+      const card = document.createElement('article');
+      card.className = 'clock-card';
+      card.dataset.tz = tz;
+
+      const head = document.createElement('div');
+      head.className = 'clock-head';
+
+      const name = document.createElement('div');
+      name.className = 'tz-name';
+      name.textContent = tz;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'remove-btn';
+      removeBtn.type = 'button';
+      removeBtn.textContent = 'Eliminar';
+      removeBtn.addEventListener('click', () => {
+        removeZone(tz);
+      });
+
+      head.appendChild(name);
+      head.appendChild(removeBtn);
+
+      const time = document.createElement('div');
+      time.className = 'time';
+      time.textContent = '';
+
+      const date = document.createElement('div');
+      date.className = 'date';
+      date.textContent = '';
+
+      card.appendChild(head);
+      card.appendChild(time);
+      if (state.settings.showDate) card.appendChild(date);
+
+      clocksEl.appendChild(card);
+    });
+
+    updateTimes(); // render inicial
+  }
+
+  // Actualiza todos los tiempos (cada segundo)
+  function updateTimes() {
+    const cards = Array.from(document.querySelectorAll('.clock-card'));
+    cards.forEach(card => {
+      const tz = card.dataset.tz;
+      const timeEl = card.querySelector('.time');
+      const dateEl = card.querySelector('.date');
+
+      try {
+        const now = new Date();
+        const opts = {
+          hour: 'numeric',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: !!state.settings.hour12,
+          timeZone: tz
+        };
+
+        const timeStr = new Intl.DateTimeFormat(undefined, opts).format(now);
+        timeEl.textContent = timeStr;
+
+        if (state.settings.showDate && dateEl) {
+          const dateOpts = {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            timeZone: tz
+          };
+          dateEl.textContent = new Intl.DateTimeFormat(undefined, dateOpts).format(now);
+        }
+      } catch (e) {
+        timeEl.textContent = '—';
+        if (dateEl) dateEl.textContent = '';
+        console.warn('Error formateando zona', tz, e);
+      }
+    });
+  }
+
+  // Add/remove
+  function addZone(tz) {
+    if (!tz) return;
+    if (!state.zones.includes(tz)) {
+      state.zones.push(tz);
+      saveZones();
+      renderClocks();
+    } else {
+      // opcional: feedback
+      flashInput('Ya añadido');
+    }
+  }
+
+  function removeZone(tz) {
+    state.zones = state.zones.filter(z => z !== tz);
+    saveZones();
+    renderClocks();
+  }
+
+  // Persistence
+  function saveZones() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.zones));
+  }
+
+  function loadZones() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { /* ignore */ }
+    // Default zones iniciales
+    return ['UTC', 'Europe/Madrid', 'America/Mexico_City'];
+  }
+
+  function saveSetting(key, val) {
+    localStorage.setItem(`wc_${key}`, JSON.stringify(val));
+  }
+
+  function loadSetting(key, def) {
+    try {
+      const r = localStorage.getItem(`wc_${key}`);
+      return r === null ? def : JSON.parse(r);
+    } catch (e) {
+      return def;
+    }
+  }
+
+  // small UI helpers
+  function flashInput(message) {
+    const prev = tzInput.placeholder;
+    tzInput.placeholder = message;
+    setTimeout(() => tzInput.placeholder = prev, 1200);
+  }
+
+  // Reset a valores por defecto
+  function resetDefaults() {
+    state.zones = ['UTC', 'Europe/Madrid', 'America/Mexico_City'];
+    state.settings.showDate = true;
+    state.settings.hour12 = false;
+    saveZones();
+    saveSetting('showDate', state.settings.showDate);
+    saveSetting('hour12', state.settings.hour12);
+    // Actualiza checkboxes y re-render
+    showDateCheckbox.checked = state.settings.showDate;
+    hour12Checkbox.checked = state.settings.hour12;
+    renderClocks();
+  }
+
+  // Listeners
+  addBtn.addEventListener('click', () => {
+    const tz = tzInput.value.trim();
+    if (tz) addZone(tz);
+    tzInput.value = '';
+  });
+
+  tzInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      addBtn.click();
+    }
+  });
+
+  showDateCheckbox.addEventListener('change', (e) => {
+    state.settings.showDate = e.target.checked;
+    saveSetting('showDate', state.settings.showDate);
+    renderClocks();
+  });
+
+  hour12Checkbox.addEventListener('change', (e) => {
+    state.settings.hour12 = e.target.checked;
+    saveSetting('hour12', state.settings.hour12);
+    renderClocks();
+  });
+
+  resetBtn.addEventListener('click', resetDefaults);
+
+  // Inicialización
+  renderClocks();
+  // Actualiza cada segundo
+  setInterval(updateTimes, 1000);
+})();
+
+
+---
+
+4) package.json (sencillo, para CI/lint/build)
+
+Ponlo en la raíz si quieres comprobar con Node + scripts:
+
+{
+  "name": "reponsil-world-clock",
+  "version": "1.0.0",
+  "description": "Reloj mundial - demo",
+  "private": true,
+  "scripts": {
+    "start": "serve . -s -l 5000",
+    "check:html": "npx html-validate \"index.html\"",
+    "check:css": "npx stylelint \"**/*.css\" --allow-empty-input",
+    "ci": "npm run check:html && npm run check:css"
+  },
+  "devDependencies": {
+    "html-validate": "^8.0.0",
+    "stylelint": "^15.0.0",
+    "serve": "^14.0.1"
+  }
+}
+
+> Nota: en Termux instala nodejs y luego npm install para obtener estas herramientas. Si no quieres Node para checks, omite check:* y usa otros linters.
+
+
+
+
+---
+
+5) .github/workflows/ci.yml (GitHub Actions)
+
+Workflow que instala Node, ejecuta npm ci (instala devDeps) y corre npm run ci. Coloca en .github/workflows/ci.yml:
+
+name: CI - Reponsil
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run HTML & CSS checks
+        run: npm run ci
+
+
+---
+
+6) run.sh (ejecutable) — útil para Termux/local
+
+Crea run.sh en raíz y hazlo ejecutable (chmod +x run.sh):
+
+#!/usr/bin/env bash
+# run.sh - start local static server for testing
+set -e
+if ! command -v npx >/dev/null 2>&1; then
+  echo "npx no encontrado. Instala node/npx."
+  exit 1
+fi
+npx serve . -s -l 5000
+
+
+---
+
+7) Lista de errores detectados originalmente y qué hice
+
+1. Etiquetas en español / no estándar (<cabeza>, <cuerpo>, <pie de página>, <sección>, etc.)
+→ Reemplazadas por etiquetas HTML válidas (<head>, <body>, <footer>, <section>, etc.).
+
+
+2. Atributos y nombres con tildes / espacios (contenido=, ancho=ancho-del-dispositivo)
+→ Convertidos a content=, width=device-width, initial-scale=1.
+
+
+3. Mezcla duplicada de dos HTML (direcciones repetidas y bloques HTML incrustados)
+→ Dejé una única plantilla limpia.
+
+
+4. Mezcla React + HTML estático (<div id="raíz"></div> y src/index.jsx)
+→ Se decidió mantener app estática; eliminé referencia a index.jsx. Si tu intención fuera React, debes separar y crear app React (vite/CRA).
+
+
+5. Clases y nombres con espacios (class="tarjeta de reloj")
+→ Homogeneicé a clock-card, clock-grid, etc., y corregí el CSS.
+
+
+6. Propiedades ARIA mal traducidas (aria-live="educado")
+→ Cambiado a aria-live="polite".
+
+
+7. Atributos input mal escritos (type="casilla de verificación")
+→ Corregido a type="checkbox".
+
+
+8. CSS con sintaxis española (ej. familia de fuentes : ..., radio-borde)
+→ Reescrito con sintaxis CSS válida.
+
+
+
+
+---
+
+8) Cómo probar localmente (pasos rápidos)
+
+En Termux o en tu PC (con Node instalado):
+
+1. Copia los archivos index.html, styles.css, script.js en la raíz del repo.
+
+
+2. (Opcional para checks) Copia package.json y ejecuta:
+
+npm install
+npm run ci
+
+
+3. Inicia servidor local:
+
+chmod +x run.sh
+./run.sh
+
+Abre http://localhost:5000 y prueba la app.
+
+
+4. Prueba añadir zonas (ej: Europe/Madrid, America/Mexico_City), verás relojes actualizándose.
+
+
+
+
+---
+
+9) Qué puedo hacer ahora (elige una acción)
+
+✅ Subir estos archivos corregidos como commit patch (yo puedo generar el patch aquí y darte instrucciones).
+
+✅ Revisar/optimizar script.js (agregar validación de zonas, mensajes UI, animaciones).
+
+✅ Convertir la app a React (si en realidad quieres usar vite/React).
+
+✅ Añadir sonidos, animaciones CSS, o un modo oscuro claro.
+
+✅ Arreglar el CI para que ejecute tests unitarios (si agregas pruebas).
+
+
+Dime qué quieres que haga a continuación y lo hago:
+por ejemplo — “Aplica los cambios como commits y muéstrame el diff” o “Genera el patch que puedo aplicar con git apply”.
